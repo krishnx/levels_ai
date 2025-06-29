@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -6,6 +8,8 @@ from app.schemas.ticket import TicketRequest, TicketResponse
 from app.db.session import get_db
 from app.models.ticket import Ticket
 from app.services.ml_processor import process_ticket
+
+from sqlalchemy import func
 
 router = APIRouter()
 
@@ -36,3 +40,21 @@ def filter_tickets(category: Optional[str] = None, db: Session = Depends(get_db)
     if category:
         query = query.filter(Ticket.ai_result.has(category=category))
     return query.all()
+
+@router.get("/stats", summary="Get ticket counts per category in the last 7 days")
+def get_stats(db: Session = Depends(get_db)):
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    results = (
+        db.query(Ticket.category, func.count(Ticket.id))
+        .filter(Ticket.created_at >= seven_days_ago)
+        .group_by(Ticket.category)
+        .all()
+    )
+
+    # Convert to dict with 0 defaults
+    stats = {"technical": 0, "billing": 0, "general": 0}
+    for category, count in results:
+        if category in stats:
+            stats[category] = count
+
+    return stats

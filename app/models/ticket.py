@@ -15,6 +15,7 @@ class Ticket(Base):
     text = Column(Text, nullable=False)
     language = Column(String, default="EN")
     created_at = Column(DateTime, default=datetime.utcnow)
+    category = Column(String, nullable=True)
 
     ai_result = relationship("AIResult", uselist=False, back_populates="ticket")
 
