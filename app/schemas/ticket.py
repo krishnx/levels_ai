@@ -10,7 +10,6 @@ class TicketRequest(BaseModel):
     @model_validator(mode='after')
     @classmethod
     def check_text_or_subject_body(cls, values):
-        print(f"krishna: {values}")
         text, subject, body = values.text, values.subject, values.body
         if not text and not (subject and body):
             raise ValueError("Either 'text' or both 'subject' and 'body' must be provided")

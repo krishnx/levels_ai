@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
+from app.ai_model.classify_ticket_openai import classify_ticket_openai
 from app.schemas.ticket import TicketRequest, TicketResponse
 from app.db.session import get_db
 from app.models.ticket import Ticket
@@ -24,7 +25,21 @@ def create_ticket(payload: TicketRequest, db: Session = Depends(get_db)):
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
+
+    try:
+        ai_result = classify_ticket_openai(text)
+        ticket.category = ai_result["category"]
+        ticket.summary = ai_result["summary"]
+        ticket.confidence = ai_result["confidence"]
+        ticket.priority = ai_result["priority"]
+
+        db.commit()
+        db.refresh(ticket)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI classification failed: {str(e)}")
+
     process_ticket(db, ticket)
+
     return ticket
 
 @router.get("/requests/{ticket_id}", response_model=TicketResponse)
