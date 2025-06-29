@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
+
+from starlette.responses import JSONResponse
 
 from app.ai_model.classify_ticket_openai import classify_ticket_openai
 from app.schemas.ticket import TicketRequest, TicketResponse
@@ -13,6 +16,9 @@ from app.services.ml_processor import process_ticket
 from sqlalchemy import func
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
 
 @router.post("/requests", response_model=TicketResponse)
 def create_ticket(payload: TicketRequest, db: Session = Depends(get_db)):
@@ -40,21 +46,28 @@ def create_ticket(payload: TicketRequest, db: Session = Depends(get_db)):
 
     process_ticket(db, ticket)
 
+    logger.debug(f"created a record in the Ticket")
+
     return ticket
+
 
 @router.get("/requests/{ticket_id}", response_model=TicketResponse)
 def get_ticket(ticket_id: int, db: Session = Depends(get_db)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+
     return ticket
+
 
 @router.get("/requests", response_model=List[TicketResponse])
 def filter_tickets(category: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(Ticket)
     if category:
         query = query.filter(Ticket.ai_result.has(category=category))
+
     return query.all()
+
 
 @router.get("/stats", summary="Get ticket counts per category in the last 7 days")
 def get_stats(db: Session = Depends(get_db)):
@@ -72,4 +85,15 @@ def get_stats(db: Session = Depends(get_db)):
         if category in stats:
             stats[category] = count
 
+    logger.debug(f"total {len(stats)} stats fetched")
+
     return stats
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected error occurred. Please try again."},
+    )
